@@ -40,8 +40,8 @@ class BlockHandle {
   Status DecodeFrom(Slice* input);
 
  private:
-  uint64_t offset_;
-  uint64_t size_;
+  uint64_t offset_;  // block的起始偏移位置
+  uint64_t size_;    // block的大小
 };
 
 // Footer encapsulates the fixed information stored at the tail

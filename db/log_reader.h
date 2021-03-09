@@ -26,6 +26,7 @@ class Reader {
 
     // Some corruption was detected.  "size" is the approximate number
     // of bytes dropped due to the corruption.
+    // 检测到一些损坏。 “大小”是由于损坏而丢弃的大约字节数。
     virtual void Corruption(size_t bytes, const Status& status) = 0;
   };
 
@@ -40,6 +41,7 @@ class Reader {
   //
   // The Reader will start reading at the first record located at physical
   // position >= initial_offset within the file.
+  // 如果 reporter 非空，则由于检测到损坏而在丢弃某些数据时会通知该 reporter
   Reader(SequentialFile* file, Reporter* reporter, bool checksum,
          uint64_t initial_offset);
 
@@ -53,6 +55,8 @@ class Reader {
   // "*scratch" as temporary storage.  The contents filled in *record
   // will only be valid until the next mutating operation on this
   // reader or the next mutation to *scratch.
+  // 可以使用“ * scratch”作为临时存储。 * record中填充的内容仅在该 reader
+  // 上的下一个变动操作，或* scratch的下一个变动之前有效。
   bool ReadRecord(Slice* record, std::string* scratch);
 
   // Returns the physical offset of the last record returned by ReadRecord.
@@ -88,13 +92,16 @@ class Reader {
   SequentialFile* const file_;
   Reporter* const reporter_;
   bool const checksum_;
-  char* const backing_store_;
+  char* const backing_store_;  // new char[kBlockSize]
   Slice buffer_;
   bool eof_;  // Last Read() indicated EOF by returning < kBlockSize
 
   // Offset of the last record returned by ReadRecord.
-  uint64_t last_record_offset_;
+  uint64_t last_record_offset_;  // 最后读到的一条record在log文件中的起始偏移
   // Offset of the first location past the end of buffer_.
+  // 每次从log文件中读取32k（当然可能小于32k）数据到buffer_，读取以后，
+  // end_of_buffer_offset_+buffer_.size() 用于记录从log文件中读取一个block
+  // 到buffer_后，这个被读取的block在log文件中的结束偏移位置
   uint64_t end_of_buffer_offset_;
 
   // Offset at which to start looking for the first record to return

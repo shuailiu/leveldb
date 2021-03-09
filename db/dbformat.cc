@@ -118,20 +118,35 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
+  // 1. 新建一个空的数组 char dst[usize + 8]
   char* dst;
   if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
     dst = new char[needed];
   }
+  // 2.写入 internal_key_size（user_key + 8）占用空间的大小，
+  //   用于查询后面紧跟着的internal_key(user_key + seq_num)
   start_ = dst;
+  // 将usize+8按照varint方式写入dst，dst指针后移动varint(usize + 8)个字节
   dst = EncodeVarint32(dst, usize + 8);
   kstart_ = dst;
+  // 3.写入user key的真实数据
   memcpy(dst, user_key.data(), usize);
   dst += usize;
-  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
+  // 4.写入序列号(seq_num << 8 | type)
+  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));  // 固定8字节
   dst += 8;
   end_ = dst;
+  // 通过user_key构造LookupKey后：
+  // [...internal_key_size...][...key_data...][seq_num << 8 | type]
+  // ^                        ^                                   ^
+  // |                        |                                   |
+  // start_                   kstart_                             end_
+
+  // user key:     [kstart_, end_ - kstart_ - 8]
+  // internal key: [kstart_, end_ - kstart_]
+  // memtable key: [start_, end_ - start_]
 }
 
 }  // namespace leveldb

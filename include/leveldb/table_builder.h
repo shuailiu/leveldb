@@ -85,7 +85,7 @@ class LEVELDB_EXPORT TableBuilder {
   void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
 
   struct Rep;
-  Rep* rep_;
+  Rep* rep_;  // TODO：什么？？？？
 };
 
 }  // namespace leveldb

@@ -17,10 +17,14 @@ void PutFixed64(std::string* dst, uint64_t value) {
   EncodeFixed64(buf, value);
   dst->append(buf, sizeof(buf));
 }
-
+// 正常情况下一个int占用4个字节（32位）
+// varint用每个字节的最高位作为标志位（1，表示后续的字节也是这个数字的一部分；
+// 0：结束），剩下的低7位存放数据。
+// 采用Varint，对于很小的int32类型的数字，则可以用1个字节来表示，大的数字
+// 则可能需要5个字节来表示
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
-  uint8_t* ptr = reinterpret_cast<uint8_t*>(dst);
+  uint8_t* ptr = reinterpret_cast<uint8_t*>(dst);  // 强制类型转化：按比特位复制
   static const int B = 128;
   if (v < (1 << 7)) {
     *(ptr++) = v;

@@ -23,6 +23,13 @@
 
 #include "leveldb/export.h"
 
+// Slice非常简单的数据结构，它包括length和一个指向外部字节数组的指针。
+// 相比返回std::string，返回Slice的开销会小的多（没有拷贝，Slice中没有实际数据，
+// 只有指向数据的指针，开销低）。
+// leveldb允许key和value包含’\0’。
+
+// 注意事项：slice的数据是外部管理的，因此slice的使用者需要保证生命周期内
+//          外部数组是有效的。
 namespace leveldb {
 
 class LEVELDB_EXPORT Slice {
@@ -87,8 +94,9 @@ class LEVELDB_EXPORT Slice {
   }
 
  private:
-  const char* data_;
-  size_t size_;
+  const char* data_;  // 指向外部字节数组数据
+  size_t size_;       // data_的大小(字节数)，注意，这个是数据的大小，
+                      // 不包括 Slice 中head的大小(7个字节)
 };
 
 inline bool operator==(const Slice& x, const Slice& y) {

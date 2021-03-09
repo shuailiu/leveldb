@@ -25,6 +25,7 @@ namespace config {
 static const int kNumLevels = 7;
 
 // Level-0 compaction is started when we hit this many files.
+// level-0的文件数量超过4，需要compact
 static const int kL0_CompactionTrigger = 4;
 
 // Soft limit on number of level-0 files.  We slow down writes at this point.
@@ -51,7 +52,7 @@ class InternalKey;
 // Value types encoded as the last component of internal keys.
 // DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
 // data structures.
-enum ValueType { kTypeDeletion = 0x0, kTypeValue = 0x1 };
+enum ValueType { kTypeDeletion = 0x0, kTypeValue = 0x1 };  // 删除标记、写入标记
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
 // sequence number (since we sort sequence numbers in decreasing order
@@ -99,6 +100,13 @@ inline Slice ExtractUserKey(const Slice& internal_key) {
 
 // A comparator for internal keys that uses a specified comparator for
 // the user key portion and breaks ties by decreasing sequence number.
+// InternalKeyComparator
+// 作用：
+// 用于内部的Key比较器。
+// cmp原则：1）userkey 2）seq大小，越大越新。
+// FindShortestSeparator / FindShortSuccessor：
+//   1）提取userkey，通过userkey查找；
+//   2）追加kMaxSequenceNumber + kValueTypeForSeek。
 class InternalKeyComparator : public Comparator {
  private:
   const Comparator* user_comparator_;
@@ -131,6 +139,12 @@ class InternalFilterPolicy : public FilterPolicy {
 // Modules in this directory should keep internal keys wrapped inside
 // the following class instead of plain strings so that we do not
 // incorrectly use string comparisons instead of an InternalKeyComparator.
+// InternalKey
+// 作用：
+// 用户角度：使用slice作为key
+// leveldb内部：使用InternalKey作为key
+// 结构：[Slice user_key] + [SequenceNumber<<8 + ValueType]，后半部分固定64位，
+//       即8字节。
 class InternalKey {
  private:
   std::string rep_;
@@ -181,6 +195,11 @@ inline bool ParseInternalKey(const Slice& internal_key,
 }
 
 // A helper class useful for DBImpl::Get()
+// LookupKey
+// 作用：
+// 当需要在leveldb查找对象的时候，查找顺序是从第0层到第n层遍历查找，
+// 找到为止(最新的修改或者删除的数据会优先被找到，所以不会出现一个键有多个值的情况)。
+// 由于不同层的键值不同，所以LookupKey提供了不同层所需的键值。
 class LookupKey {
  public:
   // Initialize *this for looking up user_key at a snapshot with

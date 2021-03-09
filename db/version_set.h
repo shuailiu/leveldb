@@ -106,9 +106,11 @@ class Version {
 
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
+  // 该函数用来选择  需要将从MemTable dump出的sstable file放入第几层
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
+  // 判断某层level的文件个数
   int NumFiles(int level) const { return files_[level].size(); }
 
   // Return a human readable string that describes this version's contents.
@@ -144,13 +146,16 @@ class Version {
   // REQUIRES: user portion of internal_key == user_key.
   void ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                           bool (*func)(void*, int, FileMetaData*));
-
+  // 所有的version都属于一个集合即Version Set
   VersionSet* vset_;  // VersionSet to which this Version belongs
+  // VersionSet是Version组成的双链表，因此Version需要记录前一个Version和
+  // 后一个Version
   Version* next_;     // Next version in linked list
   Version* prev_;     // Previous version in linked list
   int refs_;          // Number of live refs to this version
 
   // List of files per level
+  // 该version下的所有level的所有sstable文件，每个文件由FileMetaData表示
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
@@ -160,6 +165,8 @@ class Version {
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
+  // Compaction需要用compaction_score_来判断是否需要发起major compaction
+  // 这部分逻辑与某level所有SSTable file的大小有关系
   double compaction_score_;
   int compaction_level_;
 };
@@ -312,6 +319,11 @@ class VersionSet {
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+  // 在这个level里面，下次开始做compact的开始的key
+  // 对于一个level来说，合并的时候的key的指针不是每次都从头开始扫描。
+  // 如果每次合并都从这层level的第一个文件扫描到最后一个文件。实际上是
+  // 会增加读的压力。所以一种折中就是每次需要合并的时候，记住上次合并完
+  // 成后的位置，下次合并的时候从这里开始合并
   std::string compact_pointer_[config::kNumLevels];
 };
 

@@ -61,18 +61,21 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
 
 Slice BlockBuilder::Finish() {
   // Append restart array
+  // 记录重启点
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);
   }
+  // 记录重启点的个数
   PutFixed32(&buffer_, restarts_.size());
   finished_ = true;
   return Slice(buffer_);
 }
-
+// 向block中添加一对key-value
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
   assert(counter_ <= options_->block_restart_interval);
+  // key-value按照顺序写入data block，则后写入的key大于之前写入的key
   assert(buffer_.empty()  // No values yet?
          || options_->comparator->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
@@ -84,6 +87,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     }
   } else {
     // Restart compression
+    // 新的重启点，记录下位置
     restarts_.push_back(buffer_.size());
     counter_ = 0;
   }
@@ -99,8 +103,15 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(value.data(), value.size());
 
   // Update state
-  last_key_.resize(shared);
-  last_key_.append(key.data() + shared, non_shared);
+  // 如：last_key_ = "abcdef", key = "abmnq"
+  //     shared=2， non_shared=3
+
+  // last_key_.resize(2) => "ab"
+  // last_key_.append(key.data()+shared = "mnq", 3) -> "abmnq"
+  last_key_.resize(shared);  // 将string大小调整为shared，小于则截取，
+                             // 大于则用'\0'填充
+  last_key_.append(key.data() + shared, non_shared);  // 把key的noshared部分
+                                                      // 添加到last_key_尾巴
   assert(Slice(last_key_) == key);
   counter_++;
 }

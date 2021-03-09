@@ -39,39 +39,44 @@ void VersionEdit::Clear() {
 }
 
 void VersionEdit::EncodeTo(std::string* dst) const {
+  // 将比较器的标识和名称放入序列化字符串中
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
   }
+  // 将日志文件编号的标识和名称放入序列化字符串中
   if (has_log_number_) {
     PutVarint32(dst, kLogNumber);
     PutVarint64(dst, log_number_);
   }
+  // 将前一个日志的标识和名称放入序列化字符串中
   if (has_prev_log_number_) {
     PutVarint32(dst, kPrevLogNumber);
     PutVarint64(dst, prev_log_number_);
   }
+  // 将下一个文件的标识和名称放入序列化字符串中
   if (has_next_file_number_) {
     PutVarint32(dst, kNextFileNumber);
     PutVarint64(dst, next_file_number_);
   }
+  // 上一个序列号的标识和名称放入序列化字符串中
   if (has_last_sequence_) {
     PutVarint32(dst, kLastSequence);
     PutVarint64(dst, last_sequence_);
   }
-
+  // 将每个压缩点的标识，层次和InternalKey放入序列化字符串
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
     PutVarint32(dst, kCompactPointer);
     PutVarint32(dst, compact_pointers_[i].first);  // level
     PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
   }
-
+  // 删除文件部分
   for (const auto& deleted_file_kvp : deleted_files_) {
     PutVarint32(dst, kDeletedFile);
     PutVarint32(dst, deleted_file_kvp.first);   // level
     PutVarint64(dst, deleted_file_kvp.second);  // file number
   }
-
+  // 新增文件部分
   for (size_t i = 0; i < new_files_.size(); i++) {
     const FileMetaData& f = new_files_[i].second;
     PutVarint32(dst, kNewFile);
@@ -101,7 +106,8 @@ static bool GetLevel(Slice* input, int* level) {
     return false;
   }
 }
-
+// 读出来的内容是VersionEdit 通过EncodeTo序列化过的内容，因此，
+// 可以反序列化，得到VersionEdit
 Status VersionEdit::DecodeFrom(const Slice& src) {
   Clear();
   Slice input = src;

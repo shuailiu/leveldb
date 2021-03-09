@@ -111,7 +111,7 @@ class DBImpl : public DB {
   // amount of work to recover recently logged updates.  Any changes to
   // be made to the descriptor are added to *edit.
   Status Recover(VersionEdit* edit, bool* save_manifest)
-      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_); // 线程在调用Recover之前必须先获取mutex_
 
   void MaybeIgnoreError(Status* s) const;
 
@@ -165,6 +165,8 @@ class DBImpl : public DB {
   const std::string dbname_;
 
   // table_cache_ provides its own synchronization
+  // TableCache中存放了sstable中index block的数据，
+  // 查询时先去table cache中确定key在哪一个block中
   TableCache* const table_cache_;
 
   // Lock over the persistent DB state.  Non-null iff successfully acquired.
@@ -174,11 +176,11 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   std::atomic<bool> shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
-  MemTable* mem_;
-  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
+  MemTable* mem_;                     // 从log文件写入内存中的memtable
+  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted  // 只读imm
   std::atomic<bool> has_imm_;         // So bg thread can detect non-null imm_
   WritableFile* logfile_;
-  uint64_t logfile_number_ GUARDED_BY(mutex_);
+  uint64_t logfile_number_ GUARDED_BY(mutex_);  // .log文件的编号
   log::Writer* log_;
   uint32_t seed_ GUARDED_BY(mutex_);  // For sampling.
 
@@ -190,6 +192,7 @@ class DBImpl : public DB {
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
+  // 防止删除的表文件集，因为它们是正在进行的压缩的一部分
   std::set<uint64_t> pending_outputs_ GUARDED_BY(mutex_);
 
   // Has a background compaction been scheduled or is running?
@@ -201,7 +204,7 @@ class DBImpl : public DB {
 
   // Have we encountered a background error in paranoid mode?
   Status bg_error_ GUARDED_BY(mutex_);
-
+  // status_ 记录了每一层compact的状态，包括compact所用时间、写入文件的字节数
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
 };
 

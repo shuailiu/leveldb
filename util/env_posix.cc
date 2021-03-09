@@ -263,8 +263,8 @@ class PosixWritableFile final : public WritableFile {
   }
 
   Status Append(const Slice& data) override {
-    size_t write_size = data.size();
-    const char* write_data = data.data();
+    size_t write_size = data.size();       // 剩余待写入的数据的大小
+    const char* write_data = data.data();  // 待写入的数据
 
     // Fit as much as possible into buffer.
     size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
@@ -272,22 +272,26 @@ class PosixWritableFile final : public WritableFile {
     write_data += copy_size;
     write_size -= copy_size;
     pos_ += copy_size;
-    if (write_size == 0) {
+    // 1.待写入的数据大小小于buf_大小，则直接放入buf_中就返回
+    if (write_size == 0) {  // 没有需要写入的数据
       return Status::OK();
     }
 
     // Can't fit in buffer, so need to do at least one write.
-    Status status = FlushBuffer();
+    Status status = FlushBuffer();  // 将上面memcpy到buf_的数据write到fd_，
+                                    // 写入后 pos_=0
     if (!status.ok()) {
       return status;
     }
 
     // Small writes go to buffer, large writes are written directly.
+    // 将上面memcpy到buf_的数据write到fd_，写入后 pos_=0
     if (write_size < kWritableFileBufferSize) {
       std::memcpy(buf_, write_data, write_size);
       pos_ = write_size;
       return Status::OK();
     }
+    // 3.剩余待写入的数据大小大于buf_大小，则不放入buf_中，直接write到fd_
     return WriteUnbuffered(write_data, write_size);
   }
 
@@ -366,6 +370,18 @@ class PosixWritableFile final : public WritableFile {
   //
   // The path argument is only used to populate the description string in the
   // returned Status if an error occurs.
+  // 一般情况下，对硬盘（或者其他持久存储设备）文件的write操作，更新的只是内存中
+  // 的页缓存（page cache），而脏页面不会立即更新到硬盘中，而是由操作系统统一调度，
+  // 如由专门的flusher内核线程在满足一定条件时（如一定时间间隔、内存中的脏页
+  // 达到一定比例），内将脏页面同步到硬盘上（放入设备的IO请求队列）。
+
+  // 因为write调用不会等到硬盘IO完成之后才返回，因此如果OS在write调用之后、硬盘
+  // 同步之前崩溃，则数据可能丢失。虽然这样的时间窗口很小，但是对于需要保证事务的
+  // 持久化（durability）和一致性（consistency）的数据库程序来说，
+  // write()所提供的“松散的异步语义”是不够的，通常需要OS提供的
+  // 同步IO（synchronized-IO）原语来保证。
+
+  // 调用 fsync 是最严格也是最慢的，其次是 fdatasync, 而 sync 最快但是是最不靠普的
   static Status SyncFd(int fd, const std::string& fd_path) {
 #if HAVE_FULLFSYNC
     // On macOS and iOS, fsync() doesn't guarantee durability past power
@@ -786,7 +802,11 @@ void PosixEnv::Schedule(
   // Start the background thread, if we haven't done so already.
   if (!started_background_thread_) {
     started_background_thread_ = true;
+    // 创建线程执行：BackgroundThreadMain
     std::thread background_thread(PosixEnv::BackgroundThreadEntryPoint, this);
+    // 从 thread 对象分离执行线程，允许执行独立地持续。一旦该线程退出，则释放
+    // 任何分配的资源。
+    // 调用 detach 后 *this 不再占有任何线程
     background_thread.detach();
   }
 
@@ -794,7 +814,7 @@ void PosixEnv::Schedule(
   if (background_work_queue_.empty()) {
     background_work_cv_.Signal();
   }
-
+  // 推入新元素到 queue 结尾
   background_work_queue_.emplace(background_work_function, background_work_arg);
   background_work_mutex_.Unlock();
 }

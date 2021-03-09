@@ -17,6 +17,11 @@ class Slice;
 // used as keys in an sstable or a database.  A Comparator implementation
 // must be thread-safe since leveldb may invoke its methods concurrently
 // from multiple threads.
+
+// Comparator
+// 作用：
+// Comparator是个抽象类，主要用于数据键值比较的，毕竟leveldb是按照键有序存储的，
+// 所以比较器算是一个比较通用的类型。
 class LEVELDB_EXPORT Comparator {
  public:
   virtual ~Comparator();

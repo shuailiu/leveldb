@@ -73,6 +73,10 @@ class MemTableIterator : public Iterator {
 
 Iterator* MemTable::NewIterator() { return new MemTableIterator(&table_); }
 
+// User:              [Slice key]
+// Internal:          [Slice key] + [seq_num << 8 | type](固定8个字节大小)
+// Memtalbe:
+
 void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
                    const Slice& value) {
   // Format of an entry is concatenation of:
@@ -82,17 +86,35 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
   //  value bytes  : char[value.size()]
   size_t key_size = key.size();
   size_t val_size = value.size();
+  // internal_key = user_key + [seq_num << 8 | type](固定的8个字节大小)
   size_t internal_key_size = key_size + 8;
+  // 计算：保存internal_key的大小需要占用的字节数 + internal_key字节数 +
+  //      保存value的大小需要占用的字节数 + value占用的字节数量
+  // VarintLength： 需要使用几个varint来表示（varint最高位是标志位，
+  //                因此一个字节最大表示2^7=128）
   const size_t encoded_len = VarintLength(internal_key_size) +
                              internal_key_size + VarintLength(val_size) +
                              val_size;
+  // 申请一块内存用于存放: internal_key_size + internal_key + value_size + value
   char* buf = arena_.Allocate(encoded_len);
+  // 将internal_key_size按照varint的方式，写入buf中。
+  // buf： [internal_key_size(varint)]
   char* p = EncodeVarint32(buf, internal_key_size);
+  // buf中先写入key_size后，然后把key的值写入。
+  // buf：[internal_key_size(varint)] + [key]
   memcpy(p, key.data(), key_size);
   p += key_size;
+  // 将固定的8字节序列号（seq_num << 8 | type）写入buf。
+  // buf：[internal_key_size(varint)] + [key] + [seq_num(8字节)]
   EncodeFixed64(p, (s << 8) | type);
+  // 写入变长的value_size。buf：
+  // [internal_key_size(varint)] + [key] + [seq_num(8字节)] +
+  //  [vlaue_size(varint)]
   p += 8;
   p = EncodeVarint32(p, val_size);
+  // 写入value的值到buf。buf：
+  // [internal_key_size(varint)] + [key] + [seq_num(8字节)] +
+  //  [vlaue_size(varint)]+[value]
   memcpy(p, value.data(), val_size);
   assert(p + val_size == buf + encoded_len);
   table_.Insert(buf);
@@ -100,9 +122,9 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
-  Table::Iterator iter(&table_);
-  iter.Seek(memkey.data());
-  if (iter.Valid()) {
+  Table::Iterator iter(&table_);  // table_: SkipList
+  iter.Seek(memkey.data());       // skiplist中的FindGreaterOrEqual
+  if (iter.Valid()) {             // iter != nullptr
     // entry format is:
     //    klength  varint32
     //    userkey  char[klength]
@@ -114,12 +136,18 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // all entries with overly large sequence numbers.
     const char* entry = iter.key();
     uint32_t key_length;
+    // 从前5个字节中获取internal_key_size
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
+    // TODO: 上面key_ptr指向entry向后移动一个字节的位置？
+    //       为什么是1个字节，不应该是varint(inter_key_size)个字节？
     if (comparator_.comparator.user_comparator()->Compare(
+            // key_length-8是因为key_length包含了：user_key + seq_num(固定8字节)
             Slice(key_ptr, key_length - 8), key.user_key()) == 0) {
       // Correct user key
+      // type（最后一个字节是type）
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
-      switch (static_cast<ValueType>(tag & 0xff)) {
+      switch (static_cast<ValueType>(tag & 0xff)) {  // 0000 0000 .... 1111 1111
+        // 如果找到了，但是该key已经打上了删除tag，那么设置状态NotFound
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());

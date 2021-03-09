@@ -99,7 +99,7 @@ class SkipList {
   };
 
  private:
-  enum { kMaxHeight = 12 };
+  enum { kMaxHeight = 12 };  // 跳表最高有12层
 
   inline int GetMaxHeight() const {
     return max_height_.load(std::memory_order_relaxed);
@@ -117,6 +117,7 @@ class SkipList {
   //
   // If prev is non-null, fills prev[level] with pointer to previous
   // node at "level" for every level in [0..max_height_-1].
+  // 查找大于或等于key的第一个节点
   Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
 
   // Return the latest node with a key < key.
@@ -135,7 +136,7 @@ class SkipList {
 
   // Modified only by Insert().  Read racily by readers, but stale
   // values are ok.
-  std::atomic<int> max_height_;  // Height of the entire list
+  std::atomic<int> max_height_;  // Height of the entire list  // 记录跳表的高度
 
   // Read/written only by Insert().
   Random rnd_;
@@ -175,6 +176,7 @@ struct SkipList<Key, Comparator>::Node {
 
  private:
   // Array of length equal to the node height.  next_[0] is lowest level link.
+  // 弹性指针，并且采用原子性的指针来确保数据进行读写的时候的完整性
   std::atomic<Node*> next_[1];
 };
 
@@ -251,9 +253,11 @@ int SkipList<Key, Comparator>::RandomHeight() {
   return height;
 }
 
+// 判断key是否在节点n后面
 template <typename Key, class Comparator>
 bool SkipList<Key, Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
   // null n is considered infinite
+  // 当节点n不是null，且节点n的key小于待判断的key时，返回true
   return (n != nullptr) && (compare_(n->key, key) < 0);
 }
 
@@ -262,18 +266,22 @@ typename SkipList<Key, Comparator>::Node*
 SkipList<Key, Comparator>::FindGreaterOrEqual(const Key& key,
                                               Node** prev) const {
   Node* x = head_;
-  int level = GetMaxHeight() - 1;
+  int level = GetMaxHeight() - 1;  // 从最高层开始往下查找
   while (true) {
     Node* next = x->Next(level);
     if (KeyIsAfterNode(key, next)) {
       // Keep searching in this list
+      // 如果Key在node之后，则跳到下一个节点
       x = next;
     } else {
-      if (prev != nullptr) prev[level] = x;
+      // 如果key不再node之后，那么肯定在下一层
+      // 这时需要先记录下当前level层正在判断的节点x（即，比key的节点）
+      if (prev != nullptr) prev[level] = x;  // 记录这个level下key的节点
       if (level == 0) {
-        return next;
+        return next;  // 到最底层了，则返回
       } else {
         // Switch to next list
+        // 否则到下一层查找
         level--;
       }
     }
@@ -321,15 +329,17 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::FindLast()
   }
 }
 
+// 构造函数，出时候skiplist
 template <typename Key, class Comparator>
 SkipList<Key, Comparator>::SkipList(Comparator cmp, Arena* arena)
-    : compare_(cmp),
-      arena_(arena),
-      head_(NewNode(0 /* any key will do */, kMaxHeight)),
-      max_height_(1),
+    : compare_(cmp),  // 比较器
+      arena_(arena),  // 内存池
+      head_(NewNode(0 /* any key will do */, kMaxHeight)),  // 创建头节点，key是
+                                                            // 0，高度是12层
+      max_height_(1),  // 跳表的跳表的高度（层数）为1
       rnd_(0xdeadbeef) {
   for (int i = 0; i < kMaxHeight; i++) {
-    head_->SetNext(i, nullptr);
+    head_->SetNext(i, nullptr);  // 初始化第一列节点的next都指向nullptr
   }
 }
 
@@ -337,13 +347,15 @@ template <typename Key, class Comparator>
 void SkipList<Key, Comparator>::Insert(const Key& key) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
-  Node* prev[kMaxHeight];
+  Node* prev[kMaxHeight];  // 记录每一层key值的前一个节点的指针
   Node* x = FindGreaterOrEqual(key, prev);
 
   // Our data structure does not allow duplicate insertion
+  // x是与key相同，或者比key大的Node
+  // x == nullptr，表明跳表是空的，key与x的key不相同，说明跳表里目前没有这个key
   assert(x == nullptr || !Equal(key, x->key));
 
-  int height = RandomHeight();
+  int height = RandomHeight();  // 随机加高跳表,最高加到12层
   if (height > GetMaxHeight()) {
     for (int i = GetMaxHeight(); i < height; i++) {
       prev[i] = head_;
@@ -362,6 +374,7 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
   for (int i = 0; i < height; i++) {
     // NoBarrier_SetNext() suffices since we will add a barrier when
     // we publish a pointer to "x" in prev[i].
+    // 将每一层链表接上
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
   }

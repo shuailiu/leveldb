@@ -43,11 +43,24 @@ class BlockBuilder {
 
  private:
   const Options* options_;
+  // buffer_最终存放一个完整的data block：
+  //    [Entry 1]
+  //    ...
+  //    [Enety N]
+  //    [Restart Point 1]
+  //    ...
+  //    [Restart Point M]
+  //    Restart Point Count
+  // 其中，一个Enety是：
+  //  [shared key len][unshared key len][value len][unshared key content][value]
   std::string buffer_;              // Destination buffer
+  // key采用前缀压缩，但每隔16个key强制存储一个完整的key，存储整个key的点叫做重启点
   std::vector<uint32_t> restarts_;  // Restart points
+  // 重新开始记录一个完整的key（新建重启点后），向data block添加的key-value数量
   int counter_;                     // Number of entries emitted since restart
+  // 是否则调用了Finish去构造了一个完整的data block
   bool finished_;                   // Has Finish() been called?
-  std::string last_key_;
+  std::string last_key_;  // 上次插入key-value时，最后一次插入的key
 };
 
 }  // namespace leveldb

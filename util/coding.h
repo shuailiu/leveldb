@@ -17,6 +17,19 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 
+// Varint
+// 作用：
+// Varint是一种比较特殊的整数类型，它包含有Varint32和Varint64两种，它相比于
+// int32和int64最大的特点是长度可变。
+
+
+// 机制：
+// varint是一种紧凑的表示数字的方法，它用一个或多个字节来表示一个数字，
+// 值越小的数字使用越少的字节数。采用Varint，对于很小的int32类型的数字，则可以
+// 用1个字节来表示。大的数字则可能需要5个字节来表示。
+// varint中的每个字节的最高位（bit）有特殊含义，如果该位为1，表示后续的字节
+// 也是这个数字的一部分，如果该位为0，则结束。其他的7位（bit）都表示数字。
+
 namespace leveldb {
 
 // Standard Put... routines append to a string
@@ -151,7 +164,8 @@ inline const char* GetVarint32Ptr(const char* p, const char* limit,
                                   uint32_t* value) {
   if (p < limit) {
     uint32_t result = *(reinterpret_cast<const uint8_t*>(p));
-    if ((result & 128) == 0) {
+    // varint32中一个字节最高位是标志位，0：结束，1：是待查找内容的一部分
+    if ((result & 128) == 0) {  // 128 bin： 1000 0000
       *value = result;
       return p + 1;
     }

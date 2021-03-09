@@ -97,14 +97,14 @@ void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
 
 void WriteBatch::Put(const Slice& key, const Slice& value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
-  rep_.push_back(static_cast<char>(kTypeValue));
+  rep_.push_back(static_cast<char>(kTypeValue));  // first:该次Put类型是“写入”
   PutLengthPrefixedSlice(&rep_, key);
   PutLengthPrefixedSlice(&rep_, value);
 }
 
 void WriteBatch::Delete(const Slice& key) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
-  rep_.push_back(static_cast<char>(kTypeDeletion));
+  rep_.push_back(static_cast<char>(kTypeDeletion)); // first:该次Put类型是“删除”
   PutLengthPrefixedSlice(&rep_, key);
 }
 

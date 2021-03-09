@@ -14,7 +14,9 @@ namespace leveldb {
 
 struct BlockContents;
 class Comparator;
-
+// 是一个block cache，使用了数据结构LRUCache来实现的，LRUCache是通过k/v方式存储
+// 在Block中，key=cache_id 和 block 在sstable中的offset的组合
+//           value=data block 内容
 class Block {
  public:
   // Initialize the block with the specified contents.

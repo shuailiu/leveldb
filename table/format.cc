@@ -30,11 +30,14 @@ Status BlockHandle::DecodeFrom(Slice* input) {
 
 void Footer::EncodeTo(std::string* dst) const {
   const size_t original_size = dst->size();
-  metaindex_handle_.EncodeTo(dst);
-  index_handle_.EncodeTo(dst);
+  metaindex_handle_.EncodeTo(dst);  // PutVarint64: 写入meta_index
+  index_handle_.EncodeTo(dst);      // PutVarint64: 写入index
   dst->resize(2 * BlockHandle::kMaxEncodedLength);  // Padding
+  // 先写入magic后32位
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
+  // 再写入magic前32位
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
+  // kEncodedLength = 2 * BlockHandle::kMaxEncodedLength + 8 = 48 Byte
   assert(dst->size() == original_size + kEncodedLength);
   (void)original_size;  // Disable unused variable warning.
 }

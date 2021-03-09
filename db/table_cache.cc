@@ -37,14 +37,15 @@ TableCache::TableCache(const std::string& dbname, const Options& options,
       cache_(NewLRUCache(entries)) {}
 
 TableCache::~TableCache() { delete cache_; }
-
+// 根据file number，读取sstable中的index block
+// 返回的是哈希表中某个桶中的节点（LRUHandle）
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
-  *handle = cache_->Lookup(key);
+  *handle = cache_->Lookup(key);  // 返回哈希表中，某个桶里的节点（LRUHandle）
   if (*handle == nullptr) {
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
@@ -57,6 +58,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       }
     }
     if (s.ok()) {
+      // 读取sstalbe中的index block
       s = Table::Open(options_, file, file_size, &table);
     }
 
@@ -102,9 +104,12 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
+  // 在哈希表中找到某个桶中的节点（LRUHandle）
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
+    // 获取节点中的value
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+    // 调用回调函数，将查询到的value放入arg（Saver），通过key查询value结束
     s = t->InternalGet(options, k, arg, handle_result);
     cache_->Release(handle);
   }

@@ -20,6 +20,10 @@ namespace leveldb {
 
 class Env;
 
+// TableCache使用了数据结构LRUCache来实现，LRUCache是通过k/v方式存储的
+// 在TableCache中，key: 文件编号file number
+//                value: TableAndFile， 主要是sstable index block里的数据
+
 class TableCache {
  public:
   TableCache(const std::string& dbname, const Options& options, int entries);

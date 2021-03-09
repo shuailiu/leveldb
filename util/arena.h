@@ -30,6 +30,12 @@ class Arena {
 
   // Returns an estimate of the total memory usage of data allocated
   // by the arena.
+  // 统计所有由Arena生成的内存总数
+  // 这里面可能包含一些内存碎片
+  // 所以返回的是近似值
+  // 其实没有必要把memory_usage_设置成AtomicPointer的
+  // 直接设置成一般变量就可以了
+  // 比如size_t memory_usage_
   size_t MemoryUsage() const {
     return memory_usage_.load(std::memory_order_relaxed);
   }
@@ -39,8 +45,8 @@ class Arena {
   char* AllocateNewBlock(size_t block_bytes);
 
   // Allocation state
-  char* alloc_ptr_;
-  size_t alloc_bytes_remaining_;
+  char* alloc_ptr_;  // 当前申请的内存块的指针
+  size_t alloc_bytes_remaining_;  // 已经申请的内存块，剩余的bytes数
 
   // Array of new[] allocated memory blocks
   std::vector<char*> blocks_;
@@ -49,7 +55,7 @@ class Arena {
   //
   // TODO(costan): This member is accessed via atomics, but the others are
   //               accessed without any locking. Is this OK?
-  std::atomic<size_t> memory_usage_;
+  std::atomic<size_t> memory_usage_;  // 也就是总共申请出去的内存数目
 };
 
 inline char* Arena::Allocate(size_t bytes) {
